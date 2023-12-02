@@ -1,1 +1,1 @@
-# AdventOfCode-2023
+My attempt to solve the Advent of Code puzzles in F#, for fun and learning !
