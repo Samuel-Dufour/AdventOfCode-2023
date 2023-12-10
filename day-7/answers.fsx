@@ -1,13 +1,12 @@
 open System.IO
-open System.Text.RegularExpressions
 
 // let filePath = $@"{__SOURCE_DIRECTORY__}\test-input.txt"
 let filePath = $@"{__SOURCE_DIRECTORY__}\inputs.txt"
+
 type Card =
     | A = 14
     | K = 13
     | Q = 12
-    | J = 11
     | T = 10
     | Nine = 9
     | Eight = 8
@@ -17,6 +16,7 @@ type Card =
     | Four = 4
     | Three = 3
     | Two = 2
+    | J = 1
 
 module Card =
     let fromChar =
@@ -74,7 +74,43 @@ type HandKind =
         | [| 2; 2; 1 |] -> TwoPairs hand
         | [| 2; 1; 1; 1 |] -> OnePair hand
         | [| 1; 1; 1; 1; 1 |] -> HighCard hand
-        | _ -> failwith "WTF ?"
+        | a -> failwith $"WTF ? %A{a}"
+
+    static member fromHand2(Hand cards) =
+        let allCards = cards |> Array.countBy id //|> Map.ofArray
+        let map = allCards |> Map.ofArray
+
+        match Map.tryFind Card.J map with
+        | Some n when n = 5 -> 
+            Map.add Card.A 5 Map.empty
+            |> Map.map (fun k v -> Array.create v k)
+            |> Map.values |> Seq.collect id |> Seq.toArray
+        | Some n ->
+            let card = map |> Map.keys |> Seq.max
+            let currentN = map |> Map.find card
+            let m = map |> Map.add card (currentN + n) |> Map.add Card.J 0
+            let rezr = Map.map (fun k v -> Array.create v k) m
+            rezr |> Map.values |> Seq.collect id |> Seq.toArray
+
+        | None -> cards
+        |> Hand
+        |> HandKind.fromHand
+
+    static member fromHand3(Hand cards) =
+        let jCount = cards|> Array.filter (fun c -> c = Card.J)|> Array.length
+        if jCount = 0 then cards
+        else 
+            let cards = cards|> Array.filter (fun c -> c <> Card.J) |> Array.countBy id |> Array.sortByDescending (fun (c, n) -> n, int c)
+            match cards|> Array.tryHead with
+            | Some (c, n) -> 
+                let map = cards |> Map.ofArray
+                let rezr = map|> Map.add c (n + jCount)|> Map.map (fun c n -> Array.create n c)
+                rezr |> Map.values|> Seq.collect id|> Seq.toArray
+            | None -> Array.create 5 Card.A
+        |> Hand
+        |> HandKind.fromHand
+
+
 
     static member hand handKind =
         match handKind with
@@ -86,17 +122,16 @@ type HandKind =
         | OnePair h -> h
         | HighCard h -> h
 
-    static member value handKind =
-        handKind |> HandKind.hand |> Hand.handValue
 
 type HandAndBid =
     { HandKind: HandKind
-      Bid: int }
+      RealHand: Hand
+      Bid: int64 }
 
     static member sort hb1 hb2 =
         let compare hb1 hb2 =
-            let firstVals = hb1.HandKind |> HandKind.hand |> Hand.handValue
-            let secondVals = hb2.HandKind |> HandKind.hand |> Hand.handValue
+            let firstVals = hb1.RealHand |> Hand.handValue
+            let secondVals = hb2.RealHand |> Hand.handValue
 
             Seq.zip firstVals secondVals
             |> Seq.map (fun (f, s) -> f - s)
@@ -126,33 +161,20 @@ type HandAndBid =
         | HighCard _, HighCard _ -> compare hb1 hb2
 
 
-let toStuff (line: string) =
+
+let toStuff' (line: string) =
     match line.Split(' ', System.StringSplitOptions.RemoveEmptyEntries) with
-    // | [| hand; bid |] ->
-    // { HandKind = hand |> Hand.fromLine |> HandKind.fromHand
-    //   Bid = int bid }
     | [| hand; bid |] ->
-        { HandKind = hand |> Hand.fromLine |> HandKind.fromHand
-          Bid = int bid }
+        { HandKind = hand |> Hand.fromLine |> HandKind.fromHand3
+          RealHand = hand |> Hand.fromLine
+          Bid = int64 bid }
+
     | _ -> failwith "oups"
 
-// let hands = filePath |> File.ReadAllLines |> Array.map toStuff
-// |> Array.sortWith HandAndBid.sort
 
-filePath |> File.ReadAllLines |> Array.map toStuff
-//  |> Array.choose (fun h ->
-//      match h.HandKind with
-//      | ThreeOfAKind  _ -> Some h
-//      | _ -> None)
-|> Array.sortByDescending (fun h -> h.HandKind |> HandKind.hand)
+
+filePath |> File.ReadAllLines 
+|> Array.map toStuff' //|> Array.map yolo
 |> Array.sortWith HandAndBid.sort
-|> Array.mapi (fun i h -> (i + 1) * h.Bid)
+|> Array.mapi (fun i h -> (int64 i + 1L) * h.Bid)
 |> Array.sum
-
-// let firstArray = [| 0..10 |]
-// let secondArray = [| 0..10 |]
-
-// Seq.zip firstArray secondArray
-// |> Seq.map (fun (f, s) -> s - f)
-// |> Seq.tryFind (fun d -> d <> 0)
-// |> Option.defaultValue 0
